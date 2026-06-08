@@ -9,6 +9,9 @@ export function HelpPanel() {
         <li>Emoji stay as regular emoji; underline and strikethrough do not add combining marks to them.</li>
         <li>Hashtags and @mentions stay plain so LinkedIn has the best chance to recognize them.</li>
         <li>Links export as readable text plus URL because custom pasted anchor text is not supported in posts.</li>
+        <li>Markdown paste supports common inline styles, links, lists, blockquotes, and horizontal rules.</li>
+        <li>Desktop and mobile previews estimate LinkedIn's feed cutoff; logged-in real feedcard previews require LinkedIn APIs this static app cannot call.</li>
+        <li>Saved drafts are local snapshots in this browser only.</li>
         <li>Strikethrough is experimental and may render differently across devices.</li>
         <li>LinkedIn controls the final post font after paste; this app cannot copy CSS fonts into a post.</li>
         <li>The composer is the working view; Copy for LinkedIn transforms it into LinkedIn-ready plain text.</li>

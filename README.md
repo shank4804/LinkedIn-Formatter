@@ -16,10 +16,11 @@ This is not an official LinkedIn app and does not post to LinkedIn directly. All
 - Blockquotes exported as indented plain text, and horizontal dividers exported as plain divider lines.
 - Links export as readable label plus URL, for example `Read more (https://example.com)`.
 - Hashtags and mentions remain plain text so LinkedIn has the best chance to recognize them.
-- Emoji insertion toolbar with emoji-safe export behavior.
-- Live plain-text preview and 3,000-character LinkedIn post counter.
+- Searchable emoji picker with emoji-safe export behavior.
+- Markdown paste/import for common inline marks, links, lists, blockquotes, and dividers.
+- Live character counter plus desktop/mobile LinkedIn-style feed preview with estimated "see more" cutoff.
 - One-click copy with a fallback for browsers that block the Clipboard API.
-- Local draft autosave with reset/recovery behavior.
+- Local draft autosave, reset/recovery behavior, and saved draft snapshots.
 - GitHub Actions workflow for GitHub Pages deployment.
 
 ## Local Development
@@ -59,9 +60,11 @@ LinkedIn feed posts are plain text. Pasted HTML, Markdown, and CSS font choices 
 
 The character counter is based on the exported clipboard text and uses a 3,000-character feed post limit. LinkedIn can change limits or count edge-case Unicode differently, so paste into LinkedIn before publishing high-stakes posts.
 
+The desktop/mobile feed previews are client-side visual simulations. LinkedIn does not provide a public browser-only API for showing a real logged-in feedcard preview without posting, and the static GitHub Pages app cannot authenticate to LinkedIn or call LinkedIn APIs directly.
+
 ## MVP Scope
 
-Supported now: paragraphs, hard breaks, bold, italic, bold italic, underline, code, strikethrough, nested bullets, nested numbered lists, indented blockquotes, horizontal dividers, links, emoji, hashtags, mentions, local autosave, and copy.
+Supported now: paragraphs, hard breaks, bold, italic, bold italic, underline, code, strikethrough, nested bullets, nested numbered lists, indented blockquotes, horizontal dividers, links, searchable emoji insertion, hashtags, mentions, Markdown paste/import, desktop/mobile preview estimates, local autosave, saved draft snapshots, and copy.
 
 Still deferred intentionally: real LinkedIn entity mentions, direct posting, analytics, and server-side storage. These require LinkedIn API access, user authentication, analytics consent/infrastructure, or a backend service, which are outside the current static client-only GitHub Pages app.
 

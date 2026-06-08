@@ -1,19 +1,23 @@
 import { useState } from 'react';
 
 import { CopyPanel, type CopyStatus } from './components/CopyPanel';
+import { DraftHistoryPanel } from './components/DraftHistoryPanel';
 import { EditorShell } from './components/EditorShell';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HelpPanel } from './components/HelpPanel';
 import { LinkedInPreview } from './components/LinkedInPreview';
 import { copyPlainText } from './lib/clipboard';
 import { exportLinkedInText, getLinkedInCharacterSummary, type EditorNode } from './lib/exportLinkedInText';
+import type { FeedPreviewMode } from './lib/feedPreview';
 import { SAMPLE_DOCUMENT } from './lib/sampleContent';
-import { clearDraft, loadDraft, saveDraft } from './lib/storage';
+import { clearDraft, deleteDraftSnapshot, loadDraft, loadDraftHistory, saveDraft, saveDraftSnapshot, type DraftSnapshot } from './lib/storage';
 
 function App() {
   const [initialLoad] = useState(loadDraft);
   const [document, setDocument] = useState<EditorNode>(() => initialLoad.document ?? SAMPLE_DOCUMENT);
   const [editorVersion, setEditorVersion] = useState(0);
+  const [draftHistory, setDraftHistory] = useState<DraftSnapshot[]>(loadDraftHistory);
+  const [feedPreviewMode, setFeedPreviewMode] = useState<FeedPreviewMode | null>(null);
   const [storageNotice, setStorageNotice] = useState<string | null>(() => initialLoad.error ?? null);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>({ state: 'idle', message: '' });
 
@@ -45,6 +49,39 @@ function App() {
     setEditorVersion((version) => version + 1);
     setStorageNotice(null);
     setCopyStatus({ state: 'idle', message: '' });
+  }
+
+  function handleSaveDraftSnapshot(title: string) {
+    const result = saveDraftSnapshot(document, title, characterSummary.count);
+
+    setStorageNotice(result.message);
+
+    if (result.ok) {
+      setDraftHistory(loadDraftHistory());
+    }
+  }
+
+  function handleRestoreDraftSnapshot(draft: DraftSnapshot) {
+    const result = saveDraft(draft.document);
+
+    if (!result.ok) {
+      setStorageNotice(result.message);
+      return;
+    }
+
+    setDocument(draft.document);
+    setEditorVersion((version) => version + 1);
+    setStorageNotice(`Restored "${draft.title}".`);
+    setCopyStatus({ state: 'idle', message: '' });
+  }
+
+  function handleDeleteDraftSnapshot(id: string) {
+    const result = deleteDraftSnapshot(id);
+    setStorageNotice(result.message);
+
+    if (result.ok) {
+      setDraftHistory(loadDraftHistory());
+    }
   }
 
   return (
@@ -81,11 +118,19 @@ function App() {
             <LinkedInPreview summary={characterSummary} />
             <EditorShell
               key={editorVersion}
+              feedPreviewMode={feedPreviewMode}
               initialContent={document}
+              onFeedPreviewModeChange={setFeedPreviewMode}
               onDocumentChange={handleDocumentChange}
               onReset={handleReset}
             />
             <CopyPanel disabled={!exportedText} status={copyStatus} onCopy={handleCopy} />
+            <DraftHistoryPanel
+              drafts={draftHistory}
+              onDelete={handleDeleteDraftSnapshot}
+              onRestore={handleRestoreDraftSnapshot}
+              onSave={handleSaveDraftSnapshot}
+            />
             <HelpPanel />
           </div>
         </section>

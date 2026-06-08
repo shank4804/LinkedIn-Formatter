@@ -7,10 +7,14 @@ import StarterKit from '@tiptap/starter-kit';
 
 import { LINKEDIN_POST_CHARACTER_LIMIT } from '../lib/constants';
 import type { EditorNode } from '../lib/exportLinkedInText';
+import { looksLikeMarkdown, markdownToTipTap } from '../lib/markdownToTipTap';
+import type { FeedPreviewMode } from '../lib/feedPreview';
 import { Toolbar } from './Toolbar';
 
 interface EditorShellProps {
+  feedPreviewMode: FeedPreviewMode | null;
   initialContent: EditorNode;
+  onFeedPreviewModeChange: (mode: FeedPreviewMode | null) => void;
   onDocumentChange: (document: EditorNode) => void;
   onReset: () => void;
 }
@@ -41,7 +45,13 @@ const extensions = [
   }),
 ];
 
-export function EditorShell({ initialContent, onDocumentChange, onReset }: EditorShellProps) {
+export function EditorShell({
+  feedPreviewMode,
+  initialContent,
+  onDocumentChange,
+  onFeedPreviewModeChange,
+  onReset,
+}: EditorShellProps) {
   const editor = useEditor({
     extensions,
     content: initialContent as JSONContent,
@@ -57,6 +67,19 @@ export function EditorShell({ initialContent, onDocumentChange, onReset }: Edito
           .replace(/<table[\s\S]*?<\/table>/gi, '')
           .replace(/<img[^>]*>/gi, '');
       },
+      handlePaste(view, event) {
+        const plainText = event.clipboardData?.getData('text/plain') ?? '';
+
+        if (!plainText || !looksLikeMarkdown(plainText)) {
+          return false;
+        }
+
+        const parsedDocument = markdownToTipTap(plainText);
+        const schemaNode = view.state.schema.nodeFromJSON(parsedDocument);
+        const transaction = view.state.tr.replaceSelectionWith(schemaNode, false).scrollIntoView();
+        view.dispatch(transaction);
+        return true;
+      },
     },
     immediatelyRender: false,
     onCreate({ editor: currentEditor }) {
@@ -70,8 +93,47 @@ export function EditorShell({ initialContent, onDocumentChange, onReset }: Edito
   return (
     <div className="editor-shell">
       <Toolbar editor={editor} onReset={onReset} />
-      <div className="editor-frame">
-        <EditorContent editor={editor} />
+      <div className="editor-preview-controls" aria-label="Editor preview width">
+        <span>View</span>
+        <PreviewModeButton active={feedPreviewMode === null} label="Editor" onClick={() => onFeedPreviewModeChange(null)} />
+        <PreviewModeButton active={feedPreviewMode === 'desktop'} label="Desktop" onClick={() => onFeedPreviewModeChange('desktop')} />
+        <PreviewModeButton active={feedPreviewMode === 'mobile'} label="Mobile" onClick={() => onFeedPreviewModeChange('mobile')} />
+      </div>
+      <div className={`editor-frame${feedPreviewMode ? ` is-feed-preview is-${feedPreviewMode}` : ''}`}>
+        {feedPreviewMode ? (
+          <div className="feed-editor-card">
+            <FeedEditorHeader />
+            <EditorContent editor={editor} />
+          </div>
+        ) : (
+          <EditorContent editor={editor} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface PreviewModeButtonProps {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}
+
+function PreviewModeButton({ active, label, onClick }: PreviewModeButtonProps) {
+  return (
+    <button type="button" className={`preview-toggle${active ? ' is-active' : ''}`} aria-pressed={active} onClick={onClick}>
+      {label}
+    </button>
+  );
+}
+
+function FeedEditorHeader() {
+  return (
+    <div className="feed-preview-header">
+      <div className="feed-avatar" aria-hidden="true">in</div>
+      <div>
+        <p className="feed-author">LinkedIn Post Formatter</p>
+        <p className="feed-meta">Now · Public</p>
       </div>
     </div>
   );

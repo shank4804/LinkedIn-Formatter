@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   Bold,
@@ -19,6 +18,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
+import { EmojiPicker } from './EmojiPicker';
+
 interface ToolbarProps {
   editor: Editor | null;
   onReset: () => void;
@@ -33,11 +34,7 @@ interface ToolButtonProps {
   onClick: () => void;
 }
 
-const EMOJI_CHOICES = ['😀', '😊', '✨', '🚀', '💡', '✅', '🔥', '👏', '📌', '🎯'];
-
 export function Toolbar({ editor, onReset }: ToolbarProps) {
-  const [isEmojiMenuOpen, setIsEmojiMenuOpen] = useState(false);
-
   function run(command: () => boolean) {
     if (!editor) {
       return;
@@ -75,7 +72,6 @@ export function Toolbar({ editor, onReset }: ToolbarProps) {
     }
 
     editor.chain().focus().insertContent(emoji).run();
-    setIsEmojiMenuOpen(false);
   }
 
   return (
@@ -186,39 +182,7 @@ export function Toolbar({ editor, onReset }: ToolbarProps) {
         </div>
 
         <div className="toolbar-group toolbar-group-push" aria-label="Draft actions">
-          <div className="emoji-menu">
-            <button
-              type="button"
-              className="tool-button emoji-menu-button"
-              aria-label="Insert emoji"
-              aria-haspopup="menu"
-              aria-expanded={isEmojiMenuOpen}
-              disabled={!editor}
-              title="Insert emoji"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => setIsEmojiMenuOpen((isOpen) => !isOpen)}
-            >
-              😀
-            </button>
-            {isEmojiMenuOpen ? (
-              <div className="emoji-menu-popover" role="menu" aria-label="Choose emoji">
-                {EMOJI_CHOICES.map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    className="emoji-button"
-                    aria-label={`Insert ${emoji}`}
-                    role="menuitem"
-                    title={`Insert ${emoji}`}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => insertEmoji(emoji)}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <EmojiPicker disabled={!editor} onSelect={insertEmoji} />
           <ToolButton label="Reset draft" icon={Trash2} disabled={!editor} onClick={onReset} />
         </div>
       </div>
