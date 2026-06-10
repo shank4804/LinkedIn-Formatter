@@ -6,6 +6,7 @@ const COMPOSER_SELECTORS = [
   '.share-creation-state__content [contenteditable="true"]',
   '[contenteditable="true"]',
 ];
+const EXTENSION_ROOT_SELECTOR = '#linkedin-post-formatter-extension-root';
 
 export function findLinkedInComposer(root: ParentNode = document): HTMLElement | null {
   for (const selector of COMPOSER_SELECTORS) {
@@ -25,16 +26,17 @@ export function getLinkedInComposerAnchor(composer: HTMLElement): HTMLElement {
 }
 
 export function findNativeComposerDialog(root: ParentNode = document): HTMLElement | null {
+  return findNativeComposerDialogs(root)[0] ?? null;
+}
+
+export function findNativeComposerDialogs(root: ParentNode = document): HTMLElement[] {
   const composer = findLinkedInComposer(root);
+  const composerDialog = composer?.closest<HTMLElement>('[role="dialog"]') ?? null;
+  const dialogs = getDialogs(root).filter(isNativeComposerDialog);
 
-  if (composer) {
-    return composer.closest<HTMLElement>('[role="dialog"]');
-  }
-
-  return Array.from(root.querySelectorAll<HTMLElement>('[role="dialog"]')).find((dialog) => {
-    const text = (dialog.textContent ?? '').toLowerCase();
-    return text.includes('post to anyone') || text.includes('what do you want to talk about') || text.includes('strengthen post');
-  }) ?? null;
+  return [composerDialog, ...dialogs].filter((dialog, index, allDialogs): dialog is HTMLElement => {
+    return Boolean(dialog) && allDialogs.indexOf(dialog) === index;
+  });
 }
 
 export function findLinkedInPostButton(root: ParentNode = document): HTMLButtonElement | null {
@@ -58,6 +60,36 @@ export function openNativeLinkedInComposer(): boolean {
   return Boolean(control);
 }
 
+export function closeNativeLinkedInComposer(root: ParentNode = document): boolean {
+  const dialogs = findNativeComposerDialogs(root);
+  const closeControls = findNativeComposerCloseControls(root, dialogs);
+  let clicked = false;
+
+  for (const closeControl of closeControls) {
+    clickControl(closeControl);
+    clicked = true;
+  }
+
+  return clicked;
+}
+
+export function dismissNativeComposerDiscardConfirmation(root: ParentNode = document): boolean {
+  const controls = getDialogs(root)
+    .filter((dialog) => !dialog.closest(EXTENSION_ROOT_SELECTOR))
+    .flatMap((dialog) => getButtonLikeControls(dialog));
+  const discardControl = controls.find((control) => {
+    const label = getControlLabel(control);
+    return /^(discard|leave|delete|yes|ok)$/.test(label) || label.includes('discard post') || label.includes('discard draft');
+  });
+
+  if (!discardControl) {
+    return false;
+  }
+
+  clickControl(discardControl);
+  return true;
+}
+
 export function setLinkedInComposerText(composer: HTMLElement, text: string): boolean {
   if (!composer.isConnected || composer.getAttribute('contenteditable') !== 'true') {
     return false;
@@ -78,7 +110,7 @@ export function setLinkedInComposerText(composer: HTMLElement, text: string): bo
 }
 
 function isUsableComposer(composer: HTMLElement): boolean {
-  if (!composer.isConnected || composer.closest('#linkedin-post-formatter-extension-root')) {
+  if (!composer.isConnected || composer.closest(EXTENSION_ROOT_SELECTOR)) {
     return false;
   }
 
@@ -102,6 +134,150 @@ function isUsableComposer(composer: HTMLElement): boolean {
   }
 
   return Boolean(composer.closest('[role="dialog"]') || composer.closest('.share-box, .share-box-v2__modal, .share-creation-state__content'));
+}
+
+function getDialogs(root: ParentNode): HTMLElement[] {
+  const dialogs = Array.from(root.querySelectorAll<HTMLElement>('[role="dialog"]'));
+
+  if (root instanceof HTMLElement && root.matches('[role="dialog"]')) {
+    dialogs.unshift(root);
+  }
+
+  return dialogs;
+}
+
+function isNativeComposerDialog(dialog: HTMLElement): boolean {
+  if (dialog.closest(EXTENSION_ROOT_SELECTOR)) {
+    return false;
+  }
+
+  const text = (dialog.textContent ?? '').toLowerCase();
+
+  return hasNativeComposerCue(text) || hasNativeComposerCandidate(dialog);
+}
+
+function hasNativeComposerCue(text: string): boolean {
+  return text.includes('post to anyone') || text.includes('what do you want to talk about') || text.includes('strengthen post');
+}
+
+function hasNativeComposerCandidate(dialog: HTMLElement): boolean {
+  const composerCandidate = Array.from(dialog.querySelectorAll<HTMLElement>('[contenteditable="true"]')).find((element) => {
+    const label = [element.getAttribute('aria-label'), element.getAttribute('data-placeholder'), element.textContent]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    return element.classList.contains('ql-editor') || hasNativeComposerCue(label);
+  });
+
+  if (!composerCandidate) {
+    return false;
+  }
+
+  return getButtonLikeControls(dialog).some((control) => /^post$/.test(getControlLabel(control)));
+}
+
+function findDialogCloseControl(dialog: HTMLElement): HTMLElement | null {
+  return getButtonLikeControls(dialog).find((control) => {
+    const label = getControlLabel(control);
+
+    if (label.includes('close') || label.includes('dismiss') || label === 'cancel') {
+      return true;
+    }
+
+    return label === 'x' || label === '×';
+  }) ?? null;
+}
+
+function findNativeComposerCloseControls(root: ParentNode, dialogs: HTMLElement[]): HTMLElement[] {
+  const controls = dialogs
+    .flatMap((dialog) => [findDialogCloseControl(dialog), findDialogCloseControl(getDialogSearchParent(dialog))])
+    .filter((control, index, allControls): control is HTMLElement => {
+      if (!control) {
+        return false;
+      }
+
+      return !control.closest(EXTENSION_ROOT_SELECTOR) && allControls.indexOf(control) === index;
+    });
+
+  if (controls.length > 0) {
+    return controls;
+  }
+
+  return getButtonLikeControls(root).filter((control) => {
+    if (control.closest(EXTENSION_ROOT_SELECTOR) || !isLikelyCloseControl(control)) {
+      return false;
+    }
+
+    return dialogs.some((dialog) => isControlNearDialog(control, dialog));
+  });
+}
+
+function getDialogSearchParent(dialog: HTMLElement): HTMLElement {
+  const parent = dialog.parentElement;
+
+  if (!parent || parent === document.body || parent === document.documentElement) {
+    return dialog;
+  }
+
+  return parent;
+}
+
+function isLikelyCloseControl(control: HTMLElement): boolean {
+  const label = getControlLabel(control);
+  return label.includes('close') || label.includes('dismiss') || label === 'x' || label === '×';
+}
+
+function isControlNearDialog(control: HTMLElement, dialog: HTMLElement): boolean {
+  const controlRect = control.getBoundingClientRect();
+  const dialogRect = dialog.getBoundingClientRect();
+
+  if (controlRect.width <= 0 || controlRect.height <= 0 || dialogRect.width <= 0 || dialogRect.height <= 0) {
+    return false;
+  }
+
+  const controlCenterX = controlRect.left + controlRect.width / 2;
+  const controlCenterY = controlRect.top + controlRect.height / 2;
+  const margin = 80;
+
+  return (
+    controlCenterX >= dialogRect.left - margin &&
+    controlCenterX <= dialogRect.right + margin &&
+    controlCenterY >= dialogRect.top - margin &&
+    controlCenterY <= dialogRect.bottom + margin
+  );
+}
+
+function getButtonLikeControls(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"]'));
+}
+
+function getControlLabel(control: HTMLElement): string {
+  return [control.getAttribute('aria-label'), control.getAttribute('title'), control.textContent]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+    .toLowerCase();
+}
+
+function clickControl(control: HTMLElement) {
+  dispatchPointerEvent(control, 'pointerdown');
+  dispatchMouseEvent(control, 'mousedown');
+  dispatchMouseEvent(control, 'mouseup');
+  dispatchPointerEvent(control, 'pointerup');
+  control.click();
+}
+
+function dispatchPointerEvent(control: HTMLElement, type: string) {
+  if (typeof PointerEvent !== 'function') {
+    return;
+  }
+
+  control.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+}
+
+function dispatchMouseEvent(control: HTMLElement, type: string) {
+  control.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
 }
 
 function createInputEvent(text: string, type: 'beforeinput' | 'input'): Event {

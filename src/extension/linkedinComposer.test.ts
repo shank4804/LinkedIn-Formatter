@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { findLinkedInComposer, getLinkedInComposerAnchor, setLinkedInComposerText } from './linkedinComposer';
+import {
+  closeNativeLinkedInComposer,
+  dismissNativeComposerDiscardConfirmation,
+  findLinkedInComposer,
+  findNativeComposerDialog,
+  getLinkedInComposerAnchor,
+  setLinkedInComposerText,
+} from './linkedinComposer';
 
 function mockVisible(element: HTMLElement) {
   vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
@@ -54,6 +61,62 @@ describe('linkedinComposer helpers', () => {
     mockVisible(editor!);
 
     expect(findLinkedInComposer()).toBe(editor);
+  });
+
+  it('finds a native composer dialog even when the editor candidate is hidden', () => {
+    document.body.innerHTML = `
+      <div role="dialog">
+        <button type="button" aria-label="Dismiss"></button>
+        <div class="ql-editor" contenteditable="true" data-placeholder="What do you want to talk about?"></div>
+        <button type="button">Post</button>
+      </div>
+    `;
+
+    expect(findLinkedInComposer()).toBeNull();
+    expect(findNativeComposerDialog()).toBe(document.querySelector('[role="dialog"]'));
+  });
+
+  it('clicks the native composer dismiss control without closing the formatter dialog', () => {
+    document.body.innerHTML = `
+      <div id="linkedin-post-formatter-extension-root">
+        <section role="dialog" aria-label="LinkedIn Post Formatter">
+          <button type="button" aria-label="Close formatter"></button>
+        </section>
+      </div>
+      <div role="dialog">
+        <button type="button" aria-label="Dismiss"></button>
+        <div class="ql-editor" contenteditable="true" data-placeholder="What do you want to talk about?"></div>
+        <button type="button">Post</button>
+      </div>
+    `;
+    const formatterClose = document.querySelector<HTMLButtonElement>('#linkedin-post-formatter-extension-root button');
+    const nativeClose = document.querySelector<HTMLButtonElement>('body > [role="dialog"] button[aria-label="Dismiss"]');
+    const formatterHandler = vi.fn();
+    const nativeHandler = vi.fn();
+    formatterClose?.addEventListener('click', formatterHandler);
+    nativeClose?.addEventListener('click', nativeHandler);
+
+    expect(closeNativeLinkedInComposer()).toBe(true);
+
+    expect(nativeHandler).toHaveBeenCalledTimes(1);
+    expect(formatterHandler).not.toHaveBeenCalled();
+  });
+
+  it('clicks LinkedIn discard confirmations after closing a draft composer', () => {
+    document.body.innerHTML = `
+      <div role="dialog">
+        <p>Discard post?</p>
+        <button type="button">Cancel</button>
+        <button type="button">Discard</button>
+      </div>
+    `;
+    const discardButton = document.querySelectorAll<HTMLButtonElement>('button')[1];
+    const discardHandler = vi.fn();
+    discardButton.addEventListener('click', discardHandler);
+
+    expect(dismissNativeComposerDiscardConfirmation()).toBe(true);
+
+    expect(discardHandler).toHaveBeenCalledTimes(1);
   });
 
   it('writes text and dispatches input and change events', () => {

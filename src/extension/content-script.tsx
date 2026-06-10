@@ -1,8 +1,11 @@
 import { StrictMode } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { LinkedInComposerOverlay } from './LinkedInComposerOverlay';
 import {
+  closeNativeLinkedInComposer,
+  dismissNativeComposerDiscardConfirmation,
   findLinkedInComposer,
   findLinkedInPostButton,
   findNativeComposerDialog,
@@ -20,6 +23,7 @@ const LINKEDIN_SHARE_ACTIVE_URL = 'https://www.linkedin.com/feed/?shareActive=tr
 let mountedRoot: Root | null = null;
 let mountedContainer: HTMLDivElement | null = null;
 let isFormatterOpen = false;
+let allowNativeComposerOpen = false;
 let pendingFormatterOpenRequest = 0;
 
 function mountFormatter() {
@@ -44,39 +48,55 @@ function mountFormatter() {
   }
 }
 
-function renderFormatter() {
-  mountedRoot?.render(
+function renderFormatter(sync = false) {
+  const overlay = (
     <StrictMode>
       <LinkedInComposerOverlay open={isFormatterOpen} onClose={closeFormatter} onPost={postThroughLinkedIn} />
-    </StrictMode>,
+    </StrictMode>
   );
+
+  if (sync) {
+    flushSync(() => mountedRoot?.render(overlay));
+    return;
+  }
+
+  mountedRoot?.render(overlay);
 }
 
 function openFormatter() {
   isFormatterOpen = true;
   hideNativeComposer();
   window.setTimeout(hideNativeComposer, 500);
-  renderFormatter();
+  renderFormatter(true);
 }
 
-function scheduleFormatterOpenAfterNativeComposer() {
+function scheduleFormatterOpen() {
   const requestId = ++pendingFormatterOpenRequest;
 
-  window.setTimeout(async () => {
-    await waitForElement(() => findNativeComposerDialog() ?? findLinkedInComposer(), 2500);
-
+  window.setTimeout(() => {
     if (requestId === pendingFormatterOpenRequest) {
       openFormatter();
+      scheduleNativeComposerHidePasses();
     }
   }, 0);
+}
+
+function scheduleNativeComposerHidePasses() {
+  [50, 150, 350, 800, 1500, 2500].forEach((delay) => {
+    window.setTimeout(() => {
+      if (isFormatterOpen) {
+        hideNativeComposer();
+      }
+    }, delay);
+  });
 }
 
 function closeFormatter() {
   isFormatterOpen = false;
   pendingFormatterOpenRequest += 1;
   showNativeComposer();
+  renderFormatter(true);
   closeNativeComposer();
-  renderFormatter();
 }
 
 async function postThroughLinkedIn(text: string): Promise<boolean> {
@@ -87,7 +107,7 @@ async function postThroughLinkedIn(text: string): Promise<boolean> {
   let composer = findLinkedInComposer();
 
   if (!composer) {
-    openNativeLinkedInComposer();
+    openNativeComposerForPost();
     composer = await waitForLinkedInComposer();
   }
 
@@ -119,6 +139,10 @@ async function postThroughLinkedIn(text: string): Promise<boolean> {
 }
 
 function handleDocumentStartPostEvent(event: MouseEvent | PointerEvent) {
+  if (allowNativeComposerOpen) {
+    return;
+  }
+
   const target = event.target instanceof Element ? event.target : null;
 
   if (!target || target.closest(`#${ROOT_ID}`)) {
@@ -131,7 +155,20 @@ function handleDocumentStartPostEvent(event: MouseEvent | PointerEvent) {
     return;
   }
 
-  scheduleFormatterOpenAfterNativeComposer();
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  scheduleFormatterOpen();
+}
+
+function openNativeComposerForPost() {
+  allowNativeComposerOpen = true;
+
+  try {
+    openNativeLinkedInComposer();
+  } finally {
+    allowNativeComposerOpen = false;
+  }
 }
 
 async function waitForLinkedInComposer() {
@@ -189,9 +226,16 @@ function showNativeComposer() {
 }
 
 function closeNativeComposer() {
-  const dialog = findNativeComposerDialog();
-  const closeButton = dialog?.querySelector<HTMLElement>('button[aria-label*="Close"], button[aria-label*="Dismiss"]');
-  closeButton?.click();
+  requestNativeComposerDismiss();
+  [100, 250, 500, 1000, 2000].forEach((delay) => {
+    window.setTimeout(requestNativeComposerDismiss, delay);
+  });
+}
+
+function requestNativeComposerDismiss() {
+  showNativeComposer();
+  closeNativeLinkedInComposer();
+  dismissNativeComposerDiscardConfirmation();
 }
 
 function unmountFormatter() {
@@ -227,11 +271,15 @@ const observer = new MutationObserver(() => {
   }
 });
 observer.observe(document.documentElement, { childList: true, subtree: true });
+document.addEventListener('pointerdown', handleDocumentStartPostEvent, true);
+document.addEventListener('mousedown', handleDocumentStartPostEvent, true);
 document.addEventListener('click', handleDocumentStartPostEvent, true);
 document.addEventListener('linkedin-post-formatter:open', openFormatter);
 
 window.addEventListener('beforeunload', () => {
   observer.disconnect();
+  document.removeEventListener('pointerdown', handleDocumentStartPostEvent, true);
+  document.removeEventListener('mousedown', handleDocumentStartPostEvent, true);
   document.removeEventListener('click', handleDocumentStartPostEvent, true);
   document.removeEventListener('linkedin-post-formatter:open', openFormatter);
   unmountFormatter();
