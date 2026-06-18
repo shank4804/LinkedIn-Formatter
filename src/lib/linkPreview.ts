@@ -59,6 +59,45 @@ export function shouldRefreshLinkPreview(preview: LinkPreview | undefined, url: 
   return !preview.imageUrl || isLowValueTitle(preview.title, url);
 }
 
+const YOUTUBE_ID_PATTERN = /^[\w-]{11}$/;
+
+// YouTube thumbnails are derivable from the video id, so when a preview comes
+// back without a usable image (common on the public deployment where the shared
+// microlink quota returns title-only payloads) we can still show the real frame.
+export function youtubeThumbnail(url: string): string | undefined {
+  const id = youtubeVideoId(url);
+  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : undefined;
+}
+
+function youtubeVideoId(url: string): string | undefined {
+  let parsed: URL;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+
+  const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+
+  if (host === 'youtu.be') {
+    const id = parsed.pathname.slice(1).split('/')[0];
+    return YOUTUBE_ID_PATTERN.test(id) ? id : undefined;
+  }
+
+  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+    if (parsed.pathname === '/watch') {
+      const id = parsed.searchParams.get('v') ?? '';
+      return YOUTUBE_ID_PATTERN.test(id) ? id : undefined;
+    }
+
+    const match = parsed.pathname.match(/^\/(?:embed|shorts|v|live)\/([\w-]{11})(?:[/?#]|$)/);
+    return match ? match[1] : undefined;
+  }
+
+  return undefined;
+}
+
 export function urlsInText(text: string): string[] {
   return [...text.matchAll(new RegExp(URL_PATTERN.source, 'gu'))]
     .map((match) => normalizeTextUrl(match[0]))

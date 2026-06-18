@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchLinkPreview, lastUrlInText, mapMicrolink, shouldRefreshLinkPreview, urlsInText } from './linkPreview';
+import { fetchLinkPreview, lastUrlInText, mapMicrolink, shouldRefreshLinkPreview, urlsInText, youtubeThumbnail } from './linkPreview';
 
 describe('mapMicrolink', () => {
   it('maps a successful payload into a ready preview', () => {
@@ -98,6 +98,24 @@ describe('shouldRefreshLinkPreview', () => {
     expect(shouldRefreshLinkPreview({ status: 'manual' }, 'https://example.test/post')).toBe(false);
     expect(shouldRefreshLinkPreview({ status: 'loading' }, 'https://example.test/post')).toBe(false);
     expect(shouldRefreshLinkPreview({ status: 'ready', title: 'Headline', imageUrl: 'https://cdn.test/og.jpg' }, 'https://example.test/post')).toBe(false);
+  });
+});
+
+describe('youtubeThumbnail', () => {
+  it('derives the thumbnail from watch, short, embed, and shorts URLs', () => {
+    const expected = 'https://img.youtube.com/vi/PQlIZaMyu80/hqdefault.jpg';
+    expect(youtubeThumbnail('https://www.youtube.com/watch?v=PQlIZaMyu80')).toBe(expected);
+    expect(youtubeThumbnail('https://youtu.be/PQlIZaMyu80')).toBe(expected);
+    expect(youtubeThumbnail('https://youtu.be/PQlIZaMyu80?t=42')).toBe(expected);
+    expect(youtubeThumbnail('https://www.youtube.com/embed/PQlIZaMyu80')).toBe(expected);
+    expect(youtubeThumbnail('https://www.youtube.com/shorts/PQlIZaMyu80')).toBe(expected);
+  });
+
+  it('returns undefined for non-YouTube or malformed URLs', () => {
+    expect(youtubeThumbnail('https://example.test/watch?v=PQlIZaMyu80')).toBeUndefined();
+    expect(youtubeThumbnail('https://www.youtube.com/watch?v=short')).toBeUndefined();
+    expect(youtubeThumbnail('https://youtu.be/')).toBeUndefined();
+    expect(youtubeThumbnail('not a url')).toBeUndefined();
   });
 });
 

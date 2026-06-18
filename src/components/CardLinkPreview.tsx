@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { youtubeThumbnail } from '../lib/linkPreview';
 import { faviconUrl, hostnameOf, type Attachment, type LinkPreview } from '../lib/media';
 import type { PlatformSpec } from '../lib/platforms/types';
 import { PLATFORM_ICONS } from './platformIcons';
@@ -50,8 +51,34 @@ interface LinkCardProps {
 }
 
 function LinkCard({ url, preview, spec, showDescription, layout }: LinkCardProps) {
-  const [imageFailed, setImageFailed] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+
+  // Ordered image sources, falling through on load error to the placeholder:
+  // the preview's own image first, then a derived YouTube thumbnail (which fills
+  // in when the metadata fetch returned a title but no image).
+  const imageCandidates = useMemo(() => {
+    const candidates: string[] = [];
+
+    if (preview?.imageUrl) {
+      candidates.push(preview.imageUrl);
+    }
+
+    const youtube = youtubeThumbnail(url);
+
+    if (youtube && !candidates.includes(youtube)) {
+      candidates.push(youtube);
+    }
+
+    return candidates;
+  }, [preview?.imageUrl, url]);
+
+  const [imageIndex, setImageIndex] = useState(0);
+
+  // Restart the fall-through whenever the candidate set changes (e.g. a pending
+  // preview resolves), so a fresh image gets a chance before the placeholder.
+  useEffect(() => {
+    setImageIndex(0);
+  }, [imageCandidates]);
 
   const Icon = PLATFORM_ICONS[spec.id];
   const domain = hostnameOf(url);
@@ -59,7 +86,7 @@ function LinkCard({ url, preview, spec, showDescription, layout }: LinkCardProps
 
   const title = preview?.title || domain;
   const description = showDescription ? preview?.description : undefined;
-  const imageUrl = !imageFailed ? preview?.imageUrl : undefined;
+  const imageUrl = imageCandidates[imageIndex];
   const logo = preview?.logoUrl || faviconUrl(url);
 
   return (
@@ -74,7 +101,7 @@ function LinkCard({ url, preview, spec, showDescription, layout }: LinkCardProps
         {loading ? (
           <span className="card-link-preview-skeleton" aria-hidden="true" />
         ) : imageUrl ? (
-          <img src={imageUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />
+          <img src={imageUrl} alt="" loading="lazy" onError={() => setImageIndex((index) => index + 1)} />
         ) : (
           <span className="card-link-preview-placeholder" style={{ color: spec.brandColor }}>
             <Icon size={layout === 'large' ? 26 : 20} />

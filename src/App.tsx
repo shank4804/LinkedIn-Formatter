@@ -473,6 +473,7 @@ function App() {
     const characterCount = renderForPlatform(workspace.master, PLATFORMS_BY_ID.linkedin).summary.count;
     const result = saveDraftSnapshot(workspace.master, title, characterCount, {
       overrides: workspace.overrides,
+      aiVersions: Object.fromEntries(aiVersions) as Partial<Record<PlatformId, EditorNode>>,
       enabledPlatforms: workspace.enabledPlatforms,
       sources,
     });
@@ -496,7 +497,7 @@ function App() {
       overrides: draft.overrides ?? {},
       enabledPlatforms: draft.enabledPlatforms ?? prev.enabledPlatforms,
     }));
-    setAiVersions(new Map());
+    setAiVersions(new Map(Object.entries(draft.aiVersions ?? {}) as [PlatformId, EditorNode][]));
     setActivePaneEditor(null);
     setEditorVersion((version) => version + 1);
     setStorageNotice(null);
